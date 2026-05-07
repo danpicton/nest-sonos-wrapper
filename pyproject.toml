@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sonos-cast"
+version = "0.1.0"
+description = "Lightweight Cast receiver wrapper that routes audio to a Sonos S2 speaker"
+requires-python = ">=3.11"
+dependencies = [
+    "zeroconf>=0.131",
+    "protobuf>=4.25",
+    "cryptography>=42.0",
+    "soco>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "grpcio-tools>=1.62",
+]
+
+[project.scripts]
+sonos-cast = "sonos_cast.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: requires real Sonos and network (skipped by default)",
+]

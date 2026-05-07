@@ -175,3 +175,70 @@ def test_build_auth_response_sets_intermediate_certificate():
     challenge.challenge.CopyFrom(pb.AuthChallenge())
     resp = build_auth_response(challenge)
     assert bytes(resp.response.intermediate_certificate[0]) == INTERMEDIATE_CRT_DER
+
+
+# ---------------------------------------------------------------------------
+# Cryptographic guarantees on the precomputed signatures
+# ---------------------------------------------------------------------------
+
+
+def _verify_precomputed_signature(bucket_index: int) -> None:
+    """Verify a shanocast precomputed signature against the TLS cert it covers.
+
+    Reproduces what Cast SDK clients do: signed_data = peer_cert_der (we don't
+    echo sender_nonce), verified with the auth cert's public key using
+    RSASSA_PKCS1v15 + SHA-256.
+    """
+    from sonos_cast.cast_auth import _build_cert_der, signature_for_time
+    bucket_start = START_UNIX + bucket_index * STEP
+    cert_der = _build_cert_der(bucket_start)
+    sig = signature_for_time(bucket_start)
+    auth_cert = x509.load_der_x509_certificate(AUTH_CRT_DER)
+    auth_cert.public_key().verify(
+        sig, cert_der, padding.PKCS1v15(), hashes.SHA256()
+    )
+
+
+@pytest.mark.parametrize("bucket", [0, 1, 100, 300, 500, 794])
+def test_precomputed_signature_validates_against_tls_cert_der(bucket):
+    # If this regresses, our cert encoding has drifted from shanocast's
+    # BoringSSL output and the device will fail Cast V2 auth on every modern
+    # client. The serial number, name encoding, version marker, validity
+    # bucketing, and absence of extensions must all stay byte-identical.
+    _verify_precomputed_signature(bucket)
+
+
+def test_precomputed_signature_validates_for_today():
+    import time as _time
+    from sonos_cast.cast_auth import _build_cert_der, signature_for_time
+    now = int(_time.time())
+    bucket_start = START_UNIX + ((now - START_UNIX) // STEP) * STEP
+    cert_der = _build_cert_der(bucket_start)
+    sig = signature_for_time(now)
+    auth_cert = x509.load_der_x509_certificate(AUTH_CRT_DER)
+    auth_cert.public_key().verify(
+        sig, cert_der, padding.PKCS1v15(), hashes.SHA256()
+    )
+
+
+def test_build_auth_response_signature_is_validatable_by_cast_sdk_logic():
+    """End-to-end: the response we build is what a Cast SDK client would accept."""
+    from sonos_cast.cast_auth import _build_cert_der
+    now = int(time.time())
+    bucket_start = START_UNIX + ((now - START_UNIX) // STEP) * STEP
+    cert_der = _build_cert_der(bucket_start)
+    challenge = pb.DeviceAuthMessage()
+    challenge.challenge.CopyFrom(pb.AuthChallenge())
+    challenge.challenge.sender_nonce = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+    challenge.challenge.hash_algorithm = pb.SHA256
+    resp = build_auth_response(challenge)
+    auth_cert = x509.load_der_x509_certificate(bytes(resp.response.client_auth_certificate))
+    # signed_data = response.sender_nonce + peer_cert_der (chromium logic).
+    # We omit sender_nonce, so signed_data is just peer_cert_der.
+    nonce_response = bytes(resp.response.sender_nonce)
+    signed_data = nonce_response + cert_der
+    assert resp.response.hash_algorithm == pb.SHA256
+    assert nonce_response == b""  # we deliberately don't echo
+    auth_cert.public_key().verify(
+        bytes(resp.response.signature), signed_data, padding.PKCS1v15(), hashes.SHA256()
+    )

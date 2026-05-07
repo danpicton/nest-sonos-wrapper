@@ -29,9 +29,15 @@ START_UNIX = 1692057600  # 2023-08-15 00:00:00 UTC
 STEP = 172800            # 2 days in seconds
 TOTAL_SIGNATURES = 795
 
-# Fixed CN and serial used for the deterministic TLS server certificate
+# Fixed CN and serial used for the deterministic TLS server certificate.
+# Serial: openscreen's CreateCertificateInternal uses a `static int` counter
+# initialised by shanocast to 0x51c9ac6. By the time the TLS cert is built it
+# is the 4th certificate created in the chain (root, intermediate, device,
+# then this TLS cert), so the counter has post-incremented three times.
+# Getting this byte-perfect is required: shanocast's precomputed Cast V2
+# auth signatures cover the resulting cert DER exactly.
 _TLS_CERT_CN = "4aa9ca2e-c340-11ea-8000-18ba395587df"
-_TLS_CERT_SERIAL = 0x51C9AC6
+_TLS_CERT_SERIAL = 0x51C9AC9
 
 # ---------------------------------------------------------------------------
 # Static blobs
@@ -134,7 +140,8 @@ def _build_cert_der(not_before_ts: int) -> bytes:
         _seq(_utctime(not_before), _utctime(not_after)),
         name,                              # subject (self-signed)
         spki,
-        # No extensions — deliberately omitted (matches shanocast)
+        # No extensions — matches shanocast's patched openscreen, which removes
+        # the keyUsage extension and adds none for non-CA TLS certs.
     )
     sig = key.sign(tbs, padding.PKCS1v15(), hashes.SHA1())  # noqa: S303
     return _seq(tbs, _sha1_rsa_algid(), _bitstring(sig))
@@ -201,8 +208,16 @@ def build_auth_response(challenge: pb.DeviceAuthMessage) -> pb.DeviceAuthMessage
     """
     Construct a DeviceAuthMessage response for the given challenge.
 
-    The sender nonce is intentionally not echoed — the shanocast patch omits
-    it and Android/Chrome do not enforce nonce inclusion.
+    The precomputed signatures are RSASSA_PKCS1v15 over SHA-256 of the TLS
+    cert DER alone (no nonce). We therefore:
+    - report hash_algorithm=SHA256 in the response (modern GMS challenges
+      always request SHA256 anyway, but reporting it explicitly avoids any
+      verifier ambiguity);
+    - intentionally omit `sender_nonce` from the response so chromium's
+      verifier reconstructs signed_data as just `peer_cert_der` (it
+      concatenates response.sender_nonce with peer_cert_der; an empty nonce
+      means the precomputed signature applies). See chromium's
+      cast_auth_util.cc::AuthenticateChallengeReply.
     """
     sig = signature_for_time(int(time.time()))
 
@@ -211,5 +226,5 @@ def build_auth_response(challenge: pb.DeviceAuthMessage) -> pb.DeviceAuthMessage
     resp.response.client_auth_certificate = AUTH_CRT_DER
     resp.response.intermediate_certificate.append(INTERMEDIATE_CRT_DER)
     resp.response.signature_algorithm = pb.RSASSA_PKCS1v15
-    resp.response.hash_algorithm = pb.SHA1
+    resp.response.hash_algorithm = pb.SHA256
     return resp

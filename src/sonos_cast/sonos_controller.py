@@ -1,14 +1,32 @@
 """Sonos S2 playback control via SoCo."""
 from __future__ import annotations
 
-from typing import Optional
+import ipaddress
+import socket
 
+import requests.exceptions
 import soco
 from soco import SoCo
 
 
 class SonosNotFoundError(Exception):
     pass
+
+
+def _wrap_connection_errors(ip: str, fn):
+    """Call fn(), converting network errors into SonosNotFoundError."""
+    try:
+        return fn()
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        OSError,
+        socket.timeout,
+    ) as exc:
+        raise SonosNotFoundError(
+            f"Could not reach Sonos at {ip} — check the IP address and that the "
+            f"device is on the same network ({exc})"
+        ) from exc
 
 
 class SonosController:
@@ -21,6 +39,12 @@ class SonosController:
 
     @classmethod
     def from_ip(cls, ip: str) -> "SonosController":
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            raise SonosNotFoundError(
+                f"{ip!r} is not a valid IP address — did you mean something like 192.168.1.100?"
+            )
         return cls(SoCo(ip))
 
     @classmethod
@@ -72,7 +96,9 @@ class SonosController:
 
     @property
     def player_name(self) -> str:
-        return self._device.player_name
+        return _wrap_connection_errors(
+            self._device.ip_address, lambda: self._device.player_name
+        )
 
     @property
     def ip_address(self) -> str:

@@ -2,6 +2,7 @@
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
+import requests.exceptions
 
 from sonos_cast.sonos_controller import SonosController, SonosNotFoundError
 
@@ -31,6 +32,26 @@ def test_from_ip_creates_controller():
     with patch("sonos_cast.sonos_controller.SoCo", return_value=mock_device):
         ctrl = SonosController.from_ip("192.168.1.100")
     assert ctrl is not None
+
+
+def test_from_ip_rejects_invalid_ip():
+    with pytest.raises(SonosNotFoundError, match="not a valid IP address"):
+        SonosController.from_ip("192.168.024")
+
+
+def test_from_ip_rejects_hostname_string():
+    with pytest.raises(SonosNotFoundError, match="not a valid IP address"):
+        SonosController.from_ip("sonos.local")
+
+
+def test_player_name_wraps_connection_error(mock_soco):
+    mock_soco.ip_address = "192.168.1.100"
+    type(mock_soco).player_name = PropertyMock(
+        side_effect=requests.exceptions.ConnectionError("No route to host")
+    )
+    ctrl = SonosController(soco_device=mock_soco)
+    with pytest.raises(SonosNotFoundError, match="Could not reach Sonos"):
+        _ = ctrl.player_name
 
 
 def test_from_name_raises_when_not_found():

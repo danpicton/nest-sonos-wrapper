@@ -17,8 +17,8 @@ def test_service_type():
 
 
 def test_audio_capability_flag():
-    # Audio-out = 4, multizone = 4096; combined = 4100
-    assert CAST_CAPABILITIES_AUDIO == 4100
+    # Mirrors real Chromecast Audio: AUDIO_OUT(4) | VIDEO_OUT(1) = 5
+    assert CAST_CAPABILITIES_AUDIO == 5
 
 
 def test_build_txt_records_contains_required_keys():

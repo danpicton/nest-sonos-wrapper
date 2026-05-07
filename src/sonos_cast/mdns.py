@@ -6,8 +6,10 @@ from zeroconf import ServiceInfo, Zeroconf
 
 CAST_SERVICE_TYPE = "_googlecast._tcp.local."
 
-# Bitmask values: AUDIO_OUT=4, MULTIZONE=4096
-CAST_CAPABILITIES_AUDIO = 4100
+# Matches the real Chromecast Audio value: AUDIO_OUT(4) | VIDEO_OUT(1).
+# pychromecast uses model name (md=) not ca= to classify device type, but
+# Google Home app uses this field, so mirror what a real Chromecast Audio sends.
+CAST_CAPABILITIES_AUDIO = 5
 
 
 def build_cast_txt_records(friendly_name: str, device_id: str) -> dict[str, str]:

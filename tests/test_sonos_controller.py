@@ -55,7 +55,7 @@ def test_from_name_finds_matching_device():
 def test_play_uri_calls_soco_play_uri(controller, mock_soco):
     controller.play_uri("http://example.com/stream.mp3")
     mock_soco.play_uri.assert_called_once_with(
-        "http://example.com/stream.mp3", title="Cast"
+        "http://example.com/stream.mp3", title="Cast", force_radio=True
     )
 
 

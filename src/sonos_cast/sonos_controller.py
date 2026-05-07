@@ -36,7 +36,9 @@ class SonosController:
     # ------------------------------------------------------------------
 
     def play_uri(self, uri: str, title: str = "Cast") -> None:
-        self._device.play_uri(uri, title=title)
+        # S2 firmware ≥6.4.2 rejects plain http:/https: URIs; force_radio rewrites
+        # them to the x-rincon-mp3radio: scheme that Sonos accepts for live streams.
+        self._device.play_uri(uri, title=title, force_radio=True)
 
     def play(self) -> None:
         self._device.play()

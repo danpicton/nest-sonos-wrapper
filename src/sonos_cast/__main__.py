@@ -8,7 +8,7 @@ import socket
 import sys
 
 from sonos_cast.cast_server import CastServer, CAST_PORT
-from sonos_cast.mdns import CastAdvertiser
+from sonos_cast.mdns import CastAdvertiser, CAST_SERVICE_TYPE
 from sonos_cast.sonos_controller import SonosController, SonosNotFoundError
 
 
@@ -26,6 +26,47 @@ def _device_id(ip: str) -> str:
     octets = [int(x) for x in ip.split(".")]
     return "".join(f"{o:02x}" for o in [0xDE, 0xCA, 0xFF] + octets[-3:])
 
+
+# ---------------------------------------------------------------------------
+# Browse subcommand — diagnostic: list Cast devices visible on the LAN
+# ---------------------------------------------------------------------------
+
+async def _browse(timeout: float = 5.0) -> None:
+    import socket as _socket
+    from zeroconf import ServiceBrowser, ServiceStateChange, Zeroconf
+
+    found: list[str] = []
+
+    def _on_change(zeroconf: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange) -> None:
+        if state_change is not ServiceStateChange.Added:
+            return
+        info = zeroconf.get_service_info(service_type, name)
+        if info:
+            addrs = ", ".join(_socket.inet_ntoa(a) for a in info.addresses)
+            props = {k.decode(): v.decode() if isinstance(v, bytes) else v
+                     for k, v in info.properties.items()}
+            fn = props.get("fn", "(unknown)")
+            found.append(f"  {fn!r:30s}  {addrs}:{info.port}  id={props.get('id','?')}")
+        else:
+            found.append(f"  {name}")
+
+    zc = Zeroconf()
+    browser = ServiceBrowser(zc, CAST_SERVICE_TYPE, handlers=[_on_change])
+    print(f"Scanning for {CAST_SERVICE_TYPE} for {timeout:.0f}s …")
+    await asyncio.sleep(timeout)
+    zc.close()
+
+    if found:
+        print(f"Found {len(found)} Cast device(s):")
+        for line in found:
+            print(line)
+    else:
+        print("No Cast devices found. Check that the service is running and on the same subnet.")
+
+
+# ---------------------------------------------------------------------------
+# Main server run
+# ---------------------------------------------------------------------------
 
 async def _run(args: argparse.Namespace) -> None:
     logging.basicConfig(
@@ -82,22 +123,48 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Expose a Sonos S2 speaker as a Google Cast audio receiver."
     )
-    group = parser.add_mutually_exclusive_group(required=True)
+    subparsers = parser.add_subparsers(dest="command")
+
+    # --- run (default) ---
+    run_p = subparsers.add_parser("run", help="Start the Cast receiver (default)")
+    group = run_p.add_mutually_exclusive_group(required=True)
     group.add_argument("--sonos-ip", metavar="IP", help="Sonos device IP address")
-    group.add_argument(
-        "--sonos-name", metavar="NAME", help="Sonos player name (e.g. 'Living Room')"
-    )
-    parser.add_argument(
-        "--name", default="Sonos Cast", help="Friendly name shown in Cast menus"
-    )
-    parser.add_argument(
-        "--port", type=int, default=CAST_PORT, help=f"TCP port (default {CAST_PORT})"
-    )
-    parser.add_argument(
-        "--host-ip", metavar="IP", help="Override the local IP advertised via mDNS"
-    )
+    group.add_argument("--sonos-name", metavar="NAME", help="Sonos player name")
+    run_p.add_argument("--name", default="Sonos Cast", help="Friendly name in Cast menus")
+    run_p.add_argument("--port", type=int, default=CAST_PORT, help=f"TCP port (default {CAST_PORT})")
+    run_p.add_argument("--host-ip", metavar="IP", help="Override the local IP advertised via mDNS")
+    run_p.add_argument("-v", "--verbose", action="store_true")
+
+    # Keep flat (no subcommand) form working for backward compatibility:
+    # sonos-cast --sonos-ip x.x.x.x --name "..."
+    parser.add_argument("--sonos-ip", metavar="IP")
+    parser.add_argument("--sonos-name", metavar="NAME")
+    parser.add_argument("--name", default="Sonos Cast")
+    parser.add_argument("--port", type=int, default=CAST_PORT)
+    parser.add_argument("--host-ip", metavar="IP")
     parser.add_argument("-v", "--verbose", action="store_true")
+
+    # --- browse ---
+    browse_p = subparsers.add_parser(
+        "browse", help="Scan the LAN for Cast devices and print what's visible"
+    )
+    browse_p.add_argument(
+        "--timeout", type=float, default=5.0, metavar="SEC",
+        help="How long to listen (default 5s)"
+    )
+
     args = parser.parse_args()
+
+    if args.command == "browse":
+        try:
+            asyncio.run(_browse(args.timeout))
+        except KeyboardInterrupt:
+            pass
+        return
+
+    # run (explicit subcommand or flat form)
+    if not args.sonos_ip and not args.sonos_name:
+        parser.error("one of --sonos-ip or --sonos-name is required")
 
     try:
         asyncio.run(_run(args))

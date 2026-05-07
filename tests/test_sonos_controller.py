@@ -1,5 +1,5 @@
 """Tests for SoCo-backed Sonos controller (mocked SoCo)."""
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import pytest
 import requests.exceptions
@@ -12,7 +12,9 @@ def mock_soco():
     soco = MagicMock()
     soco.player_name = "Sonos Living Room"
     soco.ip_address = "192.168.1.100"
-    type(soco).volume = PropertyMock(return_value=50)
+    volume_pm = PropertyMock(return_value=50)
+    type(soco).volume = volume_pm
+    soco._volume_pm = volume_pm  # keep a direct ref for setter assertions
     return soco
 
 
@@ -69,29 +71,33 @@ def test_from_name_finds_matching_device():
 
 
 # ---------------------------------------------------------------------------
-# Playback control
+# Playback control (async — SoCo calls run in executor)
 # ---------------------------------------------------------------------------
 
 
-def test_play_uri_calls_soco_play_uri(controller, mock_soco):
-    controller.play_uri("http://example.com/stream.mp3")
+@pytest.mark.asyncio
+async def test_play_uri_calls_soco_play_uri(controller, mock_soco):
+    await controller.play_uri("http://example.com/stream.mp3")
     mock_soco.play_uri.assert_called_once_with(
         "http://example.com/stream.mp3", title="Cast", force_radio=True
     )
 
 
-def test_pause_calls_soco_pause(controller, mock_soco):
-    controller.pause()
+@pytest.mark.asyncio
+async def test_pause_calls_soco_pause(controller, mock_soco):
+    await controller.pause()
     mock_soco.pause.assert_called_once()
 
 
-def test_play_calls_soco_play(controller, mock_soco):
-    controller.play()
+@pytest.mark.asyncio
+async def test_play_calls_soco_play(controller, mock_soco):
+    await controller.play()
     mock_soco.play.assert_called_once()
 
 
-def test_stop_calls_soco_stop(controller, mock_soco):
-    controller.stop()
+@pytest.mark.asyncio
+async def test_stop_calls_soco_stop(controller, mock_soco):
+    await controller.stop()
     mock_soco.stop.assert_called_once()
 
 
@@ -100,36 +106,40 @@ def test_stop_calls_soco_stop(controller, mock_soco):
 # ---------------------------------------------------------------------------
 
 
-def test_set_volume_clamps_to_0_100(controller, mock_soco):
-    controller.set_volume(150)
-    mock_soco.set_relative_volume.assert_not_called()
-    # Should have used the volume property setter, clamped to 100
-    mock_soco.__setattr__("volume", 100)
+@pytest.mark.asyncio
+async def test_set_volume_clamps_to_100(controller, mock_soco):
+    await controller.set_volume(150)
+    # PropertyMock records setter calls as mock(value); check clamping to 100
+    mock_soco._volume_pm.assert_any_call(100)
 
 
-def test_set_volume_delegates_to_soco(controller, mock_soco):
-    controller.set_volume(75)
-    assert mock_soco.volume == 75 or mock_soco.volume != 75  # soco is a mock
+@pytest.mark.asyncio
+async def test_set_volume_clamps_to_0(controller, mock_soco):
+    await controller.set_volume(-5)
+    mock_soco._volume_pm.assert_any_call(0)
 
 
-def test_get_volume_returns_soco_volume(controller, mock_soco):
-    vol = controller.get_volume()
+@pytest.mark.asyncio
+async def test_get_volume_returns_soco_volume(controller, mock_soco):
+    vol = await controller.get_volume()
     assert vol == 50
 
 
 # ---------------------------------------------------------------------------
-# Mute
+# Mute / transport
 # ---------------------------------------------------------------------------
 
 
-def test_mute_delegates_to_soco(controller, mock_soco):
-    controller.set_mute(True)
-    assert mock_soco.mute == True or True  # just verify no exception
+@pytest.mark.asyncio
+async def test_mute_delegates_to_soco(controller, mock_soco):
+    await controller.set_mute(True)
+    assert mock_soco.mute == True
 
 
-def test_get_transport_state(controller, mock_soco):
+@pytest.mark.asyncio
+async def test_get_transport_state(controller, mock_soco):
     mock_soco.get_current_transport_info.return_value = {
         "current_transport_state": "PLAYING"
     }
-    state = controller.get_transport_state()
+    state = await controller.get_transport_state()
     assert state == "PLAYING"

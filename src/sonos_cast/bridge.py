@@ -48,10 +48,9 @@ class CastBridge:
     async def handle(self, msg: CastMessage) -> None:
         ns = msg.namespace
         payload = json.loads(msg.payload_utf8) if msg.payload_utf8 else {}
-        msg_type = payload.get("type", "")
 
         if ns == NS_AUTH:
-            return  # auth challenge — ignore; clients typically continue anyway
+            return  # handled at server level before reaching the bridge
 
         if ns == NS_HEARTBEAT:
             await self._handle_heartbeat(msg, payload)
@@ -91,7 +90,7 @@ class CastBridge:
             await self._send(
                 make_message(
                     NS_RECEIVER,
-                    self._receiver_status(payload.get("requestId", 0)),
+                    await self._receiver_status(payload.get("requestId", 0)),
                     msg.source_id,
                     msg.destination_id,
                 )
@@ -101,7 +100,7 @@ class CastBridge:
             await self._send(
                 make_message(
                     NS_RECEIVER,
-                    self._receiver_status(
+                    await self._receiver_status(
                         payload.get("requestId", 0),
                         app_id=payload.get("appId", DEFAULT_MEDIA_RECEIVER_APP_ID),
                     ),
@@ -113,14 +112,14 @@ class CastBridge:
         elif msg_type == "SET_VOLUME":
             vol_info = payload.get("volume", {})
             if "level" in vol_info:
-                self._sonos.set_volume(round(vol_info["level"] * 100))
+                await self._sonos.set_volume(round(vol_info["level"] * 100))
             if "muted" in vol_info:
-                self._sonos.set_mute(vol_info["muted"])
+                await self._sonos.set_mute(vol_info["muted"])
 
-    def _receiver_status(self, request_id: int, app_id: str | None = None) -> dict:
+    async def _receiver_status(self, request_id: int, app_id: str | None = None) -> dict:
         status: dict = {
             "volume": {
-                "level": self._sonos.get_volume() / 100,
+                "level": await self._sonos.get_volume() / 100,
                 "muted": False,
                 "stepInterval": 0.05,
                 "controlType": "master",
@@ -154,11 +153,11 @@ class CastBridge:
             self._current_content_id = content_id
             self._player_state = "PLAYING"
             self._media_session_id = int(uuid.uuid4()) & 0xFFFF or 1
-            self._sonos.play_uri(content_id, title="Cast")
+            await self._sonos.play_uri(content_id, title="Cast")
             await self._send(
                 make_message(
                     NS_MEDIA,
-                    self._media_status(payload.get("requestId", 0)),
+                    await self._media_status(payload.get("requestId", 0)),
                     msg.source_id,
                     msg.destination_id,
                 )
@@ -166,11 +165,11 @@ class CastBridge:
 
         elif msg_type == "PAUSE":
             self._player_state = "PAUSED"
-            self._sonos.pause()
+            await self._sonos.pause()
             await self._send(
                 make_message(
                     NS_MEDIA,
-                    self._media_status(payload.get("requestId", 0)),
+                    await self._media_status(payload.get("requestId", 0)),
                     msg.source_id,
                     msg.destination_id,
                 )
@@ -178,11 +177,11 @@ class CastBridge:
 
         elif msg_type == "PLAY":
             self._player_state = "PLAYING"
-            self._sonos.play()
+            await self._sonos.play()
             await self._send(
                 make_message(
                     NS_MEDIA,
-                    self._media_status(payload.get("requestId", 0)),
+                    await self._media_status(payload.get("requestId", 0)),
                     msg.source_id,
                     msg.destination_id,
                 )
@@ -190,17 +189,17 @@ class CastBridge:
 
         elif msg_type == "STOP":
             self._player_state = "IDLE"
-            self._sonos.stop()
+            await self._sonos.stop()
             await self._send(
                 make_message(
                     NS_MEDIA,
-                    self._media_status(payload.get("requestId", 0)),
+                    await self._media_status(payload.get("requestId", 0)),
                     msg.source_id,
                     msg.destination_id,
                 )
             )
 
-    def _media_status(self, request_id: int) -> dict:
+    async def _media_status(self, request_id: int) -> dict:
         return {
             "type": "MEDIA_STATUS",
             "requestId": request_id,
@@ -215,7 +214,7 @@ class CastBridge:
                         "contentType": "audio/mpeg",
                     },
                     "volume": {
-                        "level": self._sonos.get_volume() / 100,
+                        "level": await self._sonos.get_volume() / 100,
                         "muted": False,
                     },
                     "currentTime": 0,

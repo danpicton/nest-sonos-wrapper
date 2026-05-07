@@ -1,6 +1,8 @@
 """Sonos S2 playback control via SoCo."""
 from __future__ import annotations
 
+import asyncio
+import functools
 import ipaddress
 import socket
 
@@ -27,6 +29,12 @@ def _wrap_connection_errors(ip: str, fn):
             f"Could not reach Sonos at {ip} — check the IP address and that the "
             f"device is on the same network ({exc})"
         ) from exc
+
+
+async def _run(fn, *args, **kwargs):
+    """Run a blocking SoCo call in the default thread pool so the event loop stays free."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(fn, *args, **kwargs))
 
 
 class SonosController:
@@ -56,42 +64,43 @@ class SonosController:
         raise SonosNotFoundError(f"No Sonos device named {name!r} found on the network")
 
     # ------------------------------------------------------------------
-    # Playback
+    # Playback (all async — SoCo makes blocking SOAP calls)
     # ------------------------------------------------------------------
 
-    def play_uri(self, uri: str, title: str = "Cast") -> None:
+    async def play_uri(self, uri: str, title: str = "Cast") -> None:
         # S2 firmware ≥6.4.2 rejects plain http:/https: URIs; force_radio rewrites
         # them to the x-rincon-mp3radio: scheme that Sonos accepts for live streams.
-        self._device.play_uri(uri, title=title, force_radio=True)
+        await _run(self._device.play_uri, uri, title=title, force_radio=True)
 
-    def play(self) -> None:
-        self._device.play()
+    async def play(self) -> None:
+        await _run(self._device.play)
 
-    def pause(self) -> None:
-        self._device.pause()
+    async def pause(self) -> None:
+        await _run(self._device.pause)
 
-    def stop(self) -> None:
-        self._device.stop()
+    async def stop(self) -> None:
+        await _run(self._device.stop)
 
     # ------------------------------------------------------------------
     # Volume / mute
     # ------------------------------------------------------------------
 
-    def set_volume(self, level: int) -> None:
-        self._device.volume = max(0, min(100, level))
+    async def set_volume(self, level: int) -> None:
+        clamped = max(0, min(100, level))
+        await _run(lambda: setattr(self._device, "volume", clamped))
 
-    def get_volume(self) -> int:
-        return int(self._device.volume)
+    async def get_volume(self) -> int:
+        return int(await _run(lambda: self._device.volume))
 
-    def set_mute(self, muted: bool) -> None:
-        self._device.mute = muted
+    async def set_mute(self, muted: bool) -> None:
+        await _run(lambda: setattr(self._device, "mute", muted))
 
     # ------------------------------------------------------------------
     # State
     # ------------------------------------------------------------------
 
-    def get_transport_state(self) -> str:
-        info = self._device.get_current_transport_info()
+    async def get_transport_state(self) -> str:
+        info = await _run(self._device.get_current_transport_info)
         return info.get("current_transport_state", "STOPPED")
 
     @property

@@ -1,6 +1,6 @@
 """Tests for the Cast→Sonos bridge message handler."""
 import json
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,7 +17,7 @@ from sonos_cast.bridge import CastBridge, SESSION_ID
 
 @pytest.fixture
 def sonos():
-    ctrl = MagicMock()
+    ctrl = AsyncMock()
     ctrl.get_volume.return_value = 50
     ctrl.get_transport_state.return_value = "STOPPED"
     return ctrl

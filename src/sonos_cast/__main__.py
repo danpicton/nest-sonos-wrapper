@@ -95,6 +95,7 @@ async def _run(args: argparse.Namespace) -> None:
         sonos_controller=sonos,
         device_name=args.name,
         port=args.port,
+        device_id=device_id,
     )
     await server.start()
     log.info("Cast receiver listening on %s:%d", host_ip, server.port)

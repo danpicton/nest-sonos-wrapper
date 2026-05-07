@@ -25,6 +25,12 @@ _TRANSPORT_ID = "sonos-cast-transport"
 SendFn = Callable[[CastMessage], Awaitable[None]]
 
 
+def _mac_from_device_id(device_id: str) -> str:
+    """Derive a deterministic MAC-format string from the device id (last 6 hex bytes)."""
+    tail = device_id[-12:].rjust(12, "0").upper()
+    return ":".join(tail[i : i + 2] for i in range(0, 12, 2))
+
+
 class CastBridge:
     """
     Stateful per-connection handler.
@@ -38,10 +44,12 @@ class CastBridge:
         sonos_controller: SonosController,
         send_fn: SendFn,
         device_name: str = "Sonos",
+        device_id: str = "00000000000000000000000000000000",
     ) -> None:
         self._sonos = sonos_controller
         self._send = send_fn
         self._device_name = device_name
+        self._device_id = device_id
         self._media_session_id: int = 1
         self._current_content_id: str = ""
         self._player_state: str = "IDLE"
@@ -92,19 +100,84 @@ class CastBridge:
             await self._send(
                 make_message(
                     msg.namespace,
-                    {
-                        "type": "eureka_info",
-                        "request_id": payload.get("request_id", 0),
-                        "name": self._device_name,
-                        "version": 8,
-                        "cast_build_revision": "1.56.250548",
-                        "release_track": "stable-channel",
-                        "multizone": {"friendly_name": self._device_name},
-                    },
+                    self._eureka_info(payload.get("request_id", 0)),
                     msg.source_id,
                     msg.destination_id,
                 )
             )
+
+    def _eureka_info(self, request_id: int) -> dict:
+        # gms_cast_prober requests specific dotted paths (e.g. "device_info.ssdp_udn",
+        # "build_info.cast_build_revision"). It accepts a superset, so we always send
+        # all the fields a real Chromecast Audio would advertise.
+        return {
+            "type": "eureka_info",
+            "request_id": request_id,
+            "name": self._device_name,
+            "version": 8,
+            "device_info": {
+                "ssdp_udn": self._device_id,
+                "uptime": 0.0,
+                "manufacturer": "Google Inc.",
+                "model_name": "Chromecast Audio",
+                "product_name": "eureka",
+                "cloud_device_id": self._device_id,
+                "mac_address": _mac_from_device_id(self._device_id),
+                "capabilities": {
+                    "audio_hdr_supported": False,
+                    "audio_surround_mode_supported": False,
+                    "ble_supported": False,
+                    "bluetooth_audio_sink_supported": False,
+                    "bluetooth_audio_source_supported": False,
+                    "bluetooth_supported": False,
+                    "display_supported": False,
+                    "hi_res_audio_supported": False,
+                    "remote_ducking_supported": True,
+                    "setup_supported": True,
+                    "stats_reporting_supported": False,
+                },
+            },
+            "build_info": {
+                "build_type": 0,
+                "cast_build_revision": "1.56.250548",
+                "cast_control_version": 1,
+                "preview_channel_state": 0,
+                "release_track": "stable-channel",
+                "system_build_number": "1.56.250548",
+            },
+            "multizone": {
+                "audio_output_delay": 0,
+                "audio_output_delay_hdmi_offset": 0,
+                "audio_output_delay_oem": 0,
+                "groups": [],
+                "dynamic_groups": [],
+                "multichannel_status": 0,
+                "multizone_state": 0,
+                "device_name": self._device_name,
+            },
+            "opt_in": {
+                "opencast": False,
+                "preview_channel": False,
+                "remote_ducking": True,
+                "stats": False,
+            },
+            "net": {
+                "ethernet_connected": False,
+                "online": True,
+            },
+            "audio": {"digital": False},
+            "settings": {
+                "control_notifications": 1,
+                "country": "US",
+                "locale": "en-US",
+                "system_sound_effects": True,
+                "time_format": 1,
+                "timezone": "Etc/UTC",
+                "wake_on_cast": 1,
+            },
+            "wifi": {"ssid": ""},
+            "detail": {"icon_list": []},
+        }
 
     # ------------------------------------------------------------------
     # Receiver namespace

@@ -245,3 +245,22 @@ async def test_eureka_info_on_system_ns_replies(bridge, send):
     payload = json.loads(sent.payload_utf8)
     assert payload["type"] == "eureka_info"
     assert payload["request_id"] == 5
+
+
+@pytest.mark.asyncio
+async def test_eureka_info_includes_fields_gms_prober_requests(bridge, send):
+    await bridge.handle(msg(NS_SETUP, {"type": "eureka_info", "request_id": 1, "data": {}}))
+    payload = json.loads(send.call_args[0][0].payload_utf8)
+    # Real gms_cast_prober asks for these dotted paths — they must all be present.
+    assert payload["device_info"]["ssdp_udn"]
+    assert payload["device_info"]["manufacturer"]
+    assert payload["device_info"]["product_name"]
+    assert payload["build_info"]["build_type"] == 0
+    assert payload["build_info"]["cast_build_revision"]
+    assert "multizone" in payload
+
+
+def test_setup_namespace_has_no_tp_prefix():
+    # Real gms_cast_prober uses urn:x-cast:com.google.cast.setup (no tp.).
+    # An earlier fix added a stray `.tp.` which silently dropped eureka_info.
+    assert NS_SETUP == "urn:x-cast:com.google.cast.setup"

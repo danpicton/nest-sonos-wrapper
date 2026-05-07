@@ -34,9 +34,11 @@ class CastServer:
         sonos_controller: SonosController,
         device_name: str,
         port: int = CAST_PORT,
+        device_id: str = "00000000000000000000000000000000",
     ) -> None:
         self._sonos = sonos_controller
         self._device_name = device_name
+        self._device_id = device_id
         self._port = port
         self._server: Optional[asyncio.AbstractServer] = None
         self._tmpdir: Optional[tempfile.TemporaryDirectory] = None
@@ -104,6 +106,7 @@ class CastServer:
             sonos_controller=self._sonos,
             send_fn=send,
             device_name=self._device_name,
+            device_id=self._device_id,
         )
 
         buf = b""

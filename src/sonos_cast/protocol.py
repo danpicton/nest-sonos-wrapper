@@ -12,8 +12,9 @@ NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
 NS_RECEIVER = "urn:x-cast:com.google.cast.receiver"
 NS_MEDIA = "urn:x-cast:com.google.cast.media"
 NS_AUTH = "urn:x-cast:com.google.cast.tp.deviceauth"
-# Setup / system info — gms_cast_prober sends eureka_info on one of these
-NS_SETUP = "urn:x-cast:com.google.cast.tp.setup"
+# Setup / system info — gms_cast_prober sends eureka_info on the setup namespace.
+# Note: no `tp.` prefix on these (only the transport namespaces use that).
+NS_SETUP = "urn:x-cast:com.google.cast.setup"
 NS_SYSTEM = "urn:x-cast:com.google.cast.system"
 
 # The Google Default Media Receiver app that we claim to run

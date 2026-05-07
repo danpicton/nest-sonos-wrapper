@@ -1,6 +1,5 @@
 """Tests for mDNS / Zeroconf advertisement of the Cast receiver."""
-import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -50,13 +49,15 @@ def test_build_txt_records_version_is_05():
     assert records["ve"] == "05"
 
 
-def test_cast_advertiser_registers_service_on_start():
-    mock_zeroconf = MagicMock()
-    mock_zeroconf_class = MagicMock(return_value=mock_zeroconf)
+@pytest.mark.asyncio
+async def test_cast_advertiser_registers_service_on_start():
+    mock_azeroconf = MagicMock()
+    mock_azeroconf.async_register_service = AsyncMock()
+    mock_azeroconf_class = MagicMock(return_value=mock_azeroconf)
     mock_service_info = MagicMock()
     mock_service_info_class = MagicMock(return_value=mock_service_info)
 
-    with patch("sonos_cast.mdns.Zeroconf", mock_zeroconf_class), \
+    with patch("sonos_cast.mdns.AsyncZeroconf", mock_azeroconf_class), \
          patch("sonos_cast.mdns.ServiceInfo", mock_service_info_class):
         advertiser = CastAdvertiser(
             friendly_name="Sonos Test",
@@ -64,17 +65,21 @@ def test_cast_advertiser_registers_service_on_start():
             port=8009,
             host_ip="192.168.1.50",
         )
-        advertiser.start()
-        mock_zeroconf.register_service.assert_called_once_with(mock_service_info)
+        await advertiser.start()
+        mock_azeroconf.async_register_service.assert_called_once_with(mock_service_info)
 
 
-def test_cast_advertiser_unregisters_service_on_stop():
-    mock_zeroconf = MagicMock()
-    mock_zeroconf_class = MagicMock(return_value=mock_zeroconf)
+@pytest.mark.asyncio
+async def test_cast_advertiser_unregisters_service_on_stop():
+    mock_azeroconf = MagicMock()
+    mock_azeroconf.async_register_service = AsyncMock()
+    mock_azeroconf.async_unregister_service = AsyncMock()
+    mock_azeroconf.async_close = AsyncMock()
+    mock_azeroconf_class = MagicMock(return_value=mock_azeroconf)
     mock_service_info = MagicMock()
     mock_service_info_class = MagicMock(return_value=mock_service_info)
 
-    with patch("sonos_cast.mdns.Zeroconf", mock_zeroconf_class), \
+    with patch("sonos_cast.mdns.AsyncZeroconf", mock_azeroconf_class), \
          patch("sonos_cast.mdns.ServiceInfo", mock_service_info_class):
         advertiser = CastAdvertiser(
             friendly_name="Sonos Test",
@@ -82,7 +87,7 @@ def test_cast_advertiser_unregisters_service_on_stop():
             port=8009,
             host_ip="192.168.1.50",
         )
-        advertiser.start()
-        advertiser.stop()
-        mock_zeroconf.unregister_service.assert_called_once()
-        mock_zeroconf.close.assert_called_once()
+        await advertiser.start()
+        await advertiser.stop()
+        mock_azeroconf.async_unregister_service.assert_called_once()
+        mock_azeroconf.async_close.assert_called_once()

@@ -62,7 +62,7 @@ async def _run(args: argparse.Namespace) -> None:
         port=server.port,
         host_ip=host_ip,
     )
-    advertiser.start()
+    await advertiser.start()
     log.info(
         "mDNS advertised as '%s' — open Cast in Chrome or Android to see it",
         args.name,
@@ -73,7 +73,7 @@ async def _run(args: argparse.Namespace) -> None:
     except asyncio.CancelledError:
         pass
     finally:
-        advertiser.stop()
+        await advertiser.stop()
         await server.stop()
         log.info("Stopped.")
 

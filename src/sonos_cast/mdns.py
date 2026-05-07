@@ -2,7 +2,8 @@
 import socket
 from typing import Optional
 
-from zeroconf import ServiceInfo, Zeroconf
+from zeroconf import ServiceInfo
+from zeroconf.asyncio import AsyncZeroconf
 
 CAST_SERVICE_TYPE = "_googlecast._tcp.local."
 
@@ -38,10 +39,10 @@ class CastAdvertiser:
         self._device_id = device_id
         self._port = port
         self._host_ip = host_ip
-        self._zeroconf: Optional[Zeroconf] = None
+        self._azeroconf: Optional[AsyncZeroconf] = None
         self._info: Optional[ServiceInfo] = None
 
-    def start(self) -> None:
+    async def start(self) -> None:
         txt = build_cast_txt_records(self._friendly_name, self._device_id)
         service_name = f"{self._friendly_name}.{CAST_SERVICE_TYPE}"
         self._info = ServiceInfo(
@@ -52,10 +53,10 @@ class CastAdvertiser:
             properties=txt,
             server=f"{self._friendly_name.replace(' ', '-')}.local.",
         )
-        self._zeroconf = Zeroconf()
-        self._zeroconf.register_service(self._info)
+        self._azeroconf = AsyncZeroconf()
+        await self._azeroconf.async_register_service(self._info)
 
-    def stop(self) -> None:
-        if self._zeroconf and self._info:
-            self._zeroconf.unregister_service(self._info)
-            self._zeroconf.close()
+    async def stop(self) -> None:
+        if self._azeroconf and self._info:
+            await self._azeroconf.async_unregister_service(self._info)
+            await self._azeroconf.async_close()

@@ -93,6 +93,7 @@ class CastServer:
         log.debug("Cast client connected: %s", peer)
 
         async def send(msg: CastMessage) -> None:
+            log.debug("<<< [%s] %s", msg.namespace.split(".")[-1], msg.payload_utf8[:120] if msg.payload_utf8 else "(binary)")
             try:
                 writer.write(encode_message(msg))
                 await writer.drain()
@@ -119,8 +120,10 @@ class CastServer:
                     msg, consumed = result
                     buf = buf[consumed:]
                     if msg.namespace == NS_AUTH and msg.payload_binary:
+                        log.debug(">>> AUTH (binary %d bytes)", len(msg.payload_binary))
                         await self._handle_auth(msg, writer)
                     else:
+                        log.debug(">>> [%s] %s", msg.namespace.split(".")[-1], msg.payload_utf8[:120] if msg.payload_utf8 else "(binary)")
                         await bridge.handle(msg)
         except (asyncio.IncompleteReadError, ConnectionResetError, ssl.SSLError):
             pass

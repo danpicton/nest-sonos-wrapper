@@ -11,23 +11,24 @@ log = logging.getLogger(__name__)
 
 CAST_SERVICE_TYPE = "_googlecast._tcp.local."
 
-# Matches the real Chromecast Audio value: AUDIO_OUT(4) | VIDEO_OUT(1).
-# pychromecast uses model name (md=) not ca= to classify device type, but
-# Google Home app uses this field, so mirror what a real Chromecast Audio sends.
-CAST_CAPABILITIES_AUDIO = 5
+# AUDIO_OUT(4) only — matches real Chromecast Audio.
+CAST_CAPABILITIES_AUDIO = 4
 
 
 def build_cast_txt_records(friendly_name: str, device_id: str) -> dict[str, str]:
     return {
         "id": device_id,
-        "fn": friendly_name,
-        "md": "Chromecast Audio",
-        "ca": str(CAST_CAPABILITIES_AUDIO),
+        "cd": device_id,   # required by some Cast SDK versions
+        "rm": "",
         "ve": "05",
-        "st": "0",
-        "bs": device_id,
-        "rs": "",
+        "md": "Chromecast Audio",
         "ic": "/setup/icon.png",
+        "fn": friendly_name,
+        "ca": str(CAST_CAPABILITIES_AUDIO),
+        "st": "0",
+        "bs": device_id[:12],  # Bluetooth serial — 12 hex chars (MAC-like)
+        "nf": "1",
+        "rs": "",
     }
 
 

@@ -22,9 +22,11 @@ def _local_ip() -> str:
 
 
 def _device_id(ip: str) -> str:
-    # Derive a stable pseudo-MAC from the host IP so the mDNS id is consistent.
+    # 32-char hex UUID required by the Cast SDK (16 bytes: fixed prefix + all 4 IP octets padded).
     octets = [int(x) for x in ip.split(".")]
-    return "".join(f"{o:02x}" for o in [0xDE, 0xCA, 0xFF] + octets[-3:])
+    raw = bytes([0xDE, 0xCA, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+                 0x00, 0x00, 0x00, 0x00] + octets)
+    return raw.hex()
 
 
 # ---------------------------------------------------------------------------

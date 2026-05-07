@@ -17,8 +17,8 @@ def test_service_type():
 
 
 def test_audio_capability_flag():
-    # Mirrors real Chromecast Audio: AUDIO_OUT(4) | VIDEO_OUT(1) = 5
-    assert CAST_CAPABILITIES_AUDIO == 5
+    # Chromecast Audio: AUDIO_OUT(4) only
+    assert CAST_CAPABILITIES_AUDIO == 4
 
 
 def test_build_txt_records_contains_required_keys():
@@ -26,7 +26,7 @@ def test_build_txt_records_contains_required_keys():
         friendly_name="Sonos Living Room",
         device_id="abcdef123456",
     )
-    for key in ("id", "fn", "md", "ca", "ve", "st", "bs"):
+    for key in ("id", "cd", "fn", "md", "ca", "ve", "st", "bs", "nf"):
         assert key in records, f"missing key: {key}"
 
 

@@ -13,6 +13,8 @@ from sonos_cast.protocol import (
     NS_RECEIVER,
     NS_MEDIA,
     NS_AUTH,
+    NS_SETUP,
+    NS_SYSTEM,
     DEFAULT_MEDIA_RECEIVER_APP_ID,
 )
 from sonos_cast.sonos_controller import SonosController
@@ -60,6 +62,8 @@ class CastBridge:
             await self._handle_receiver(msg, payload)
         elif ns == NS_MEDIA:
             await self._handle_media(msg, payload)
+        elif ns in (NS_SETUP, NS_SYSTEM):
+            await self._handle_setup(msg, payload)
 
     # ------------------------------------------------------------------
     # Heartbeat
@@ -78,6 +82,29 @@ class CastBridge:
     def _handle_connection(self, payload: dict) -> None:
         if payload.get("type") == "CLOSE":
             self.closed = True
+
+    # ------------------------------------------------------------------
+    # Setup / system namespace (gms_cast_prober device info probe)
+    # ------------------------------------------------------------------
+
+    async def _handle_setup(self, msg: CastMessage, payload: dict) -> None:
+        if payload.get("type") == "eureka_info":
+            await self._send(
+                make_message(
+                    msg.namespace,
+                    {
+                        "type": "eureka_info",
+                        "request_id": payload.get("request_id", 0),
+                        "name": self._device_name,
+                        "version": 8,
+                        "cast_build_revision": "1.56.250548",
+                        "release_track": "stable-channel",
+                        "multizone": {"friendly_name": self._device_name},
+                    },
+                    msg.source_id,
+                    msg.destination_id,
+                )
+            )
 
     # ------------------------------------------------------------------
     # Receiver namespace
@@ -104,6 +131,21 @@ class CastBridge:
                         payload.get("requestId", 0),
                         app_id=payload.get("appId", DEFAULT_MEDIA_RECEIVER_APP_ID),
                     ),
+                    msg.source_id,
+                    msg.destination_id,
+                )
+            )
+
+        elif msg_type == "GET_APP_AVAILABILITY":
+            app_ids = payload.get("appId", [])
+            await self._send(
+                make_message(
+                    NS_RECEIVER,
+                    {
+                        "type": "APP_AVAILABILITY",
+                        "requestId": payload.get("requestId", 0),
+                        "availability": {app_id: "APP_AVAILABLE" for app_id in app_ids},
+                    },
                     msg.source_id,
                     msg.destination_id,
                 )

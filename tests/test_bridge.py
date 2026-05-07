@@ -11,6 +11,8 @@ from sonos_cast.protocol import (
     NS_RECEIVER,
     NS_MEDIA,
     NS_AUTH,
+    NS_SETUP,
+    NS_SYSTEM,
 )
 from sonos_cast.bridge import CastBridge, SESSION_ID
 
@@ -194,3 +196,52 @@ async def test_set_volume_muted_calls_set_mute(bridge, sonos):
         )
     )
     sonos.set_mute.assert_called_once_with(True)
+
+
+# ---------------------------------------------------------------------------
+# GET_APP_AVAILABILITY
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_app_availability_replies_all_available(bridge, send):
+    await bridge.handle(
+        msg(
+            NS_RECEIVER,
+            {"type": "GET_APP_AVAILABILITY", "appId": ["CC1AD845", "2FA4D21B"], "requestId": 9},
+        )
+    )
+    sent = send.call_args[0][0]
+    payload = json.loads(sent.payload_utf8)
+    assert payload["type"] == "APP_AVAILABILITY"
+    assert payload["requestId"] == 9
+    assert payload["availability"]["CC1AD845"] == "APP_AVAILABLE"
+    assert payload["availability"]["2FA4D21B"] == "APP_AVAILABLE"
+
+
+# ---------------------------------------------------------------------------
+# Setup / system namespace (eureka_info)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_eureka_info_on_setup_ns_replies(bridge, send):
+    await bridge.handle(
+        msg(NS_SETUP, {"type": "eureka_info", "request_id": 3, "data": {"params": ["name"]}})
+    )
+    sent = send.call_args[0][0]
+    payload = json.loads(sent.payload_utf8)
+    assert payload["type"] == "eureka_info"
+    assert payload["request_id"] == 3
+    assert "name" in payload
+
+
+@pytest.mark.asyncio
+async def test_eureka_info_on_system_ns_replies(bridge, send):
+    await bridge.handle(
+        msg(NS_SYSTEM, {"type": "eureka_info", "request_id": 5, "data": {}})
+    )
+    sent = send.call_args[0][0]
+    payload = json.loads(sent.payload_utf8)
+    assert payload["type"] == "eureka_info"
+    assert payload["request_id"] == 5

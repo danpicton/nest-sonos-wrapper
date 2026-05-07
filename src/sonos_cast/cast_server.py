@@ -147,7 +147,14 @@ class CastServer:
     ) -> None:
         challenge = pb.DeviceAuthMessage()
         challenge.ParseFromString(msg.payload_binary)
+        log.debug(
+            "AUTH challenge: hash_algo=%s, sig_algo=%s, nonce=%dB",
+            "SHA256" if challenge.challenge.hash_algorithm == pb.SHA256 else "SHA1",
+            challenge.challenge.signature_algorithm,
+            len(bytes(challenge.challenge.sender_nonce)),
+        )
         auth_resp = build_auth_response(challenge)
+        log.debug("<<< AUTH (binary %d bytes)", len(auth_resp.SerializeToString()))
 
         proto = pb.CastMessage()
         proto.protocol_version = pb.CastMessage.CASTV2_1_0

@@ -11,8 +11,10 @@ log = logging.getLogger(__name__)
 
 CAST_SERVICE_TYPE = "_googlecast._tcp.local."
 
-# AUDIO_OUT(4) only — matches real Chromecast Audio.
-CAST_CAPABILITIES_AUDIO = 4
+# Real Chromecast Audio devices advertise ca=2052 (= AUDIO_OUT(4) | 0x800).
+# Bit 0x800 isn't documented in the public Chromium enum but appears on every
+# real-device trace; clients that filter by capabilities rely on it being set.
+CAST_CAPABILITIES_AUDIO = 2052
 
 
 def build_cast_txt_records(friendly_name: str, device_id: str) -> dict[str, str]:

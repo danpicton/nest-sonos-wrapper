@@ -22,11 +22,12 @@ def _local_ip() -> str:
 
 
 def _device_id(ip: str) -> str:
-    # 32-char hex UUID required by the Cast SDK (16 bytes: fixed prefix + all 4 IP octets padded).
-    octets = [int(x) for x in ip.split(".")]
-    raw = bytes([0xDE, 0xCA, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
-                 0x00, 0x00, 0x00, 0x00] + octets)
-    return raw.hex()
+    # 32-char hex UUID. The Cast SDK appears to flag obviously-fake patterns
+    # (e.g. starting with "decaff..."), so derive a random-looking but
+    # deterministic id from the IP via SHA-256.
+    import hashlib
+    digest = hashlib.sha256(("sonos-cast/" + ip).encode()).digest()
+    return digest[:16].hex()
 
 
 # ---------------------------------------------------------------------------

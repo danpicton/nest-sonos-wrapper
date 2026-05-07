@@ -17,8 +17,8 @@ def test_service_type():
 
 
 def test_audio_capability_flag():
-    # Chromecast Audio: AUDIO_OUT(4) only
-    assert CAST_CAPABILITIES_AUDIO == 4
+    # Chromecast Audio: matches real-device advertisement (AUDIO_OUT | 0x800).
+    assert CAST_CAPABILITIES_AUDIO == 2052
 
 
 def test_build_txt_records_contains_required_keys():

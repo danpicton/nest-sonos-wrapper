@@ -232,27 +232,38 @@ class CastBridge:
                 await self._sonos.set_mute(vol_info["muted"])
 
     async def _receiver_status(self, request_id: int, app_id: str | None = None) -> dict:
+        # Real Chromecast Audio receiver_status always includes `applications`
+        # (empty array or list of running apps), `userEq`, and `volume` with the
+        # full set of fields. Sparse status messages get rejected by some Cast
+        # clients during device validation.
+        applications = []
+        if app_id:
+            applications.append(
+                {
+                    "appId": app_id,
+                    "displayName": "Default Media Receiver",
+                    "iconUrl": "",
+                    "isIdleScreen": False,
+                    "launchedFromCloud": False,
+                    "namespaces": [{"name": NS_MEDIA}],
+                    "sessionId": SESSION_ID,
+                    "statusText": "",
+                    "transportId": _TRANSPORT_ID,
+                    "universalAppId": app_id,
+                }
+            )
         status: dict = {
+            "applications": applications,
+            "userEq": {},
             "volume": {
                 "level": await self._sonos.get_volume() / 100,
                 "muted": False,
                 "stepInterval": 0.05,
                 "controlType": "master",
             },
-            "isActiveInput": True,
-            "isStandBy": False,
+            "isActiveInput": bool(app_id),
+            "isStandBy": not app_id,
         }
-        if app_id:
-            status["applications"] = [
-                {
-                    "appId": app_id,
-                    "displayName": "Default Media Receiver",
-                    "namespaces": [{"name": NS_MEDIA}],
-                    "sessionId": SESSION_ID,
-                    "statusText": "",
-                    "transportId": _TRANSPORT_ID,
-                }
-            ]
         return {"type": "RECEIVER_STATUS", "requestId": request_id, "status": status}
 
     # ------------------------------------------------------------------
